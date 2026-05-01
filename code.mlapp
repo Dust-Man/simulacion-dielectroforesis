@@ -1,0 +1,497 @@
+classdef otrabes < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure                  matlab.ui.Figure
+        MagnituddelcampoenLabel   matlab.ui.control.Label
+        yEditField                matlab.ui.control.EditField
+        yEditFieldLabel           matlab.ui.control.Label
+        DistanciaSlider           matlab.ui.control.Slider
+        DistanciaSliderLabel      matlab.ui.control.Label
+        NumPuntosEditField        matlab.ui.control.NumericEditField
+        NumdepuntosLabel          matlab.ui.control.Label
+        xEditField                matlab.ui.control.EditField
+        xEditFieldLabel           matlab.ui.control.Label
+        LongQnSlider              matlab.ui.control.Slider
+        LongdelineaSlider_2Label  matlab.ui.control.Label
+        CantQnSlider              matlab.ui.control.Slider
+        CantcargasLabel_2         matlab.ui.control.Label
+        CantQpSlider              matlab.ui.control.Slider
+        CantcargasLabel           matlab.ui.control.Label
+        LongQpSlider              matlab.ui.control.Slider
+        LongdelineaSliderLabel    matlab.ui.control.Label
+        MagnitudQnEditField       matlab.ui.control.NumericEditField
+        MagnituddecargasLabel_3   matlab.ui.control.Label
+        MagnitudQpEditField       matlab.ui.control.NumericEditField
+        MagnituddecargasLabel_4   matlab.ui.control.Label
+        simularButton             matlab.ui.control.Button
+        UIAxes                    matlab.ui.control.UIAxes
+    end
+
+    
+    methods (Access = private)
+        
+        function results = graficarLineas(d, Qp, Qn, N, ncargas_p, ncargas_n, linea_lon_p, linea_lon_n, app,x0,y0)
+            % Variables de usuario
+            % Definimos el valor de las cargas y su distancia
+            % Modificar la posición de las cargas, cambia la distancia.
+
+            % Punto donde evaluar el campo eléctrico
+            % Definición de matrices de puntos
+            % Utilizando meshgrid definimos dos matrices, con N x N puntos,
+            % representando los valores de los puntos (x,y) donde se calculará el campo
+            % eléctrico
+            lsx = 5; lix = -5;
+            lsy = 5; liy = -5;
+            x = linspace(lix, lsx, N); % Los valores de x en el intervalo de -lsx a lix
+            y = linspace(liy, lsy, N); % Los valores de y en el intervalo de -lsy a liy
+            [xG, yG] = meshgrid(x, y);
+            
+            
+            % Posiciones
+            % Asignamos la posición de ambas cargas según la distancia ingresada y los
+            % parametros de n_cargas y linea_lon
+            xCp = -d/2; yCp = linspace(-(linea_lon_p/2), linea_lon_p/2, ncargas_p);    % carga 1 (p)
+            xCn =  d/2; yCn = linspace(-(linea_lon_n/2), linea_lon_n/2, ncargas_n);    % carga 2 (n)
+            
+            % Campo eléctrico inicialmente en 0
+            Ex = zeros(N); Ey = zeros(N);
+            % Constantes
+            epsO = 8.854e-12;
+            kC = 1 / (4 * pi * epsO);
+            % Uso de ciclos. Cálculo de campo eléctrico para cargas positivas
+            Ex0 = 0;
+            Ey0 = 0;
+            for i = 1:ncargas_p
+                % Se usa para calcular la suma del campo eléctrico de todas las cargas
+                % positivas
+                % Calculo de CE positivo ------------------------------------------
+                % Cálculo de campo eléctrico
+                % Calculamos el campo eléctrico para cada carga
+                Rx = xG - xCp; % componentes x del vector posición
+                Ry = yG - yCp(i); % componentes y
+                r = sqrt(Rx.^2 + Ry.^2); % magnitudes del vector posición
+                r(r == 0) = 1e-12; % evitar division entre 0
+                
+                % Utilizando la fórmula del campo eléctrico calculamos el campo eléctrico
+                % para cada punto del meshgrid
+                % E = k q/r^2 * \hat{r}
+                % \hat{r} = vec{r}/ r
+                % vec{r} = (Rx, Ry)
+                Ex = Ex + kC .* Qp .* Rx ./ (r.^3); % Componente x del campo eléctrico
+                Ey = Ey + kC .* Qp .* Ry ./ (r.^3); % Componente y del campo eléctrico
+                Rx0 = x0 - xCp;
+                Ry0 = y0 - yCp(i);
+                r0 = sqrt(Rx0^2 + Ry0^2);
+                if r0 == 0
+                    r0 = 1e-12;
+                end
+                
+                Ex0 = Ex0 + kC * Qp * Rx0 / (r0^3);
+                Ey0 = Ey0 + kC * Qp * Ry0 / (r0^3);
+                
+                % ---------------------------------------------------------------------
+                
+            end
+            
+            % Sección 1. Uso de ciclos. Cálculo de campo eléctrico para cargas negativas
+            for i = 1:ncargas_n
+                % Se usa para calcular la suma del campo eléctrico de todas las cargas
+                % negativas    
+            
+                % Calculo del CE negativo -----------------------------------------
+                % Cálculo de campo eléctrico para cada carga negativa
+                Rx = xG - xCn;
+                Ry = yG - yCn(i);
+                r = sqrt(Rx.^2 + Ry.^2);
+                r(r == 0) = 1e-12;
+                
+                % Debido a la superposición de campos eléctricos simplemente sumamos el
+                % campo derivado de la segunda carga a los campos actuales
+                Ex = Ex + kC .* (Qn) .* Rx ./ (r.^3);
+                Ey = Ey + kC .* (Qn) .* Ry ./ (r.^3);
+            
+                % ---------------------------------------------------------------------
+                
+            end
+
+            E0 = sqrt(Ex0^2 + Ey0^2);
+            
+            % Normalización
+            % En la realidad cada campo eléctrico tendrá magnitudes muy diferentes,
+            % mientras más cerca de la carga mayor, pero cómo lo que queremos
+            % representar es más la dirección del campo eléctrico utilizamos el
+            % vector unitario para cada campo
+            E = sqrt(Ex.^2 + Ey.^2); % Magnitud del campo
+            E(E == 0) = 1e-12;
+            u = Ex ./ E; % Componentes x del campo normalizadas
+            v = Ey ./ E;
+            
+            % Graficamos los vectores para cada punto de las matrices del meshgrid
+            quiver(app.UIAxes,xG, yG, u, v, 'autoscalefactor', 0.5);
+
+            % Limitamos la gráfica de -2 a 2 en x  y en y
+            axis(app.UIAxes, "equal");
+            axis(app.UIAxes, [lix lsx liy lsy] )
+            hold(app.UIAxes,"on");
+
+            % Dibujar punto
+            plot(app.UIAxes,x0, y0, 'ko', 'MarkerFaceColor', 'y', 'MarkerSize', 8);
+            
+         
+            
+            % Mostrar texto con valor
+            texto = sprintf('E = %.2e N/C', E0);
+            text(app.UIAxes,x0 + 0.2, y0, texto, 'FontSize', 10, 'Color', 'k', 'BackgroundColor','w');
+            
+            % Dibujar cargas
+            % Hacemos una representación gráfica de las cargas utilizando rectangulos
+            % con curvatura completa
+            
+            % Si la carga es negativa será de color azul y tendrá el texto '-', si no
+            % será azul y tendrá el texto '+'
+            if (Qp > 0)
+               cQp = 'r'; tQp = '+';
+            else
+               cQp = 'b'; tQp = '-';  
+            end
+            
+            if (Qn > 0)
+               cQn = 'r'; tQn = '+';
+            else
+               cQn = 'b'; tQn = '-';  
+            end
+            
+            % Dibujar cargas positivas
+            dy_p = abs(yCp(2) - yCp(1)); % distancia entre cargas positivas
+            dy_n = abs(yCn(2) - yCn(1)); % distancia entre cargas negativas
+            a_p = 0.7 * dy_p;
+            a_n = 0.7 * dy_n;
+            a_p = min(a_n, a_p);
+            
+            for index = 1:ncargas_p % Se usa un ciclo para graficar todas las cargas positivas
+                rectangle(app.UIAxes,'Position', [xCp - a_p/2, yCp(index) - a_p/2, a_p, a_p], 'Curvature', [1 1], 'FaceColor', cQp);
+                text(app.UIAxes,xCp-0.05, yCp(index), tQp, 'Color', 'white', 'FontSize', 10);
+                
+            end
+            
+            % Dibujar cargas negativas
+            
+            
+            
+            for index = 1:ncargas_n % S1. Se usa un ciclo para graficar todas las cargas negativas
+              rectangle(app.UIAxes,'Position', [xCn - a_p/2, yCn(index) - a_p/2, a_p, a_p], 'Curvature', [1 1], 'FaceColor', cQn);
+              text(app.UIAxes,xCn-0.05, yCn(index), tQn, 'Color', 'white', 'FontSize', 10);  
+            end
+        end
+       
+        
+        function results = init(app)
+            cla(app.UIAxes);  % Clear axes
+            d = app.DistanciaSlider.Value;
+            Qp = app.MagnitudQpEditField.Value;
+            Qn = -(app.MagnitudQnEditField.Value);
+            N = app.NumPuntosEditField.Value;
+            ncargas_p = app.CantQpSlider.Value;
+            ncargas_n = app.CantQnSlider.Value;
+            linea_lon_p = app.LongQpSlider.Value;
+            linea_lon_n = app.LongQnSlider.Value;
+            x0 = str2double(app.xEditField.Value);
+            y0 = str2double(app.yEditField.Value);
+   
+            graficarLineas(d,Qp,Qn,N,ncargas_p,ncargas_n, linea_lon_p,linea_lon_n,app,x0,y0);
+        end
+        
+        function results = func3(app)
+            % Calcula la magnitud del campo eléctrico en puntos específicos
+        % puntos: matriz de Nx2 donde cada fila es [x, y]
+        
+        % Constantes
+        epsO = 8.854e-12;
+        kC = 1 / (4 * pi * epsO);
+        
+        % Inicializar componentes del campo
+        num_puntos = size(puntos, 1);
+        Ex_total = zeros(num_puntos, 1);
+        Ey_total = zeros(num_puntos, 1);
+        
+        % Posiciones de cargas
+        xCp = -d/2; 
+        yCp = linspace(-(linea_lon_p/2), linea_lon_p/2, ncargas_p);
+        xCn =  d/2; 
+        yCn = linspace(-(linea_lon_n/2), linea_lon_n/2, ncargas_n);
+        
+        % Calcular campo de cargas positivas
+        for i = 1:ncargas_p
+            Rx = puntos(:,1) - xCp;
+            Ry = puntos(:,2) - yCp(i);
+            r = sqrt(Rx.^2 + Ry.^2);
+            r(r == 0) = 1e-12; % evitar división por cero
+            
+            Ex_total = Ex_total + kC .* Qp .* Rx ./ (r.^3);
+            Ey_total = Ey_total + kC .* Qp .* Ry ./ (r.^3);
+        end
+        
+        % Calcular campo de cargas negativas
+        for i = 1:ncargas_n
+            Rx = puntos(:,1) - xCn;
+            Ry = puntos(:,2) - yCn(i);
+            r = sqrt(Rx.^2 + Ry.^2);
+            r(r == 0) = 1e-12;
+            
+            Ex_total = Ex_total + kC .* (Qn) .* Rx ./ (r.^3);
+            Ey_total = Ey_total + kC .* (Qn) .* Ry ./ (r.^3);
+        end
+        
+        % Calcular magnitud
+        magnetudes = sqrt(Ex_total.^2 + Ey_total.^2);
+            end
+    end
+    
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Button pushed function: simularButton
+        function simularButtonPushed(app, event)
+            init(app)
+        end
+
+        % Value changed function: CantQpSlider
+        function CantQpSliderValueChanged(app, event)
+            init(app)
+        end
+
+        % Value changed function: CantQnSlider
+        function CantQnSliderValueChanged(app, event)
+            init(app)
+            
+        end
+
+        % Value changed function: LongQpSlider
+        function LongQpSliderValueChanged(app, event)
+            init(app)
+        end
+
+        % Value changed function: LongQnSlider
+        function LongQnSliderValueChanged(app, event)
+            init(app)            
+        end
+
+        % Value changed function: DistanciaSlider
+        function DistanciaSliderValueChanged(app, event)
+            init(app)            
+        end
+
+        % Value changed function: MagnitudQnEditField
+        function MagnitudQnEditFieldValueChanged(app, event)
+            init(app)            
+        end
+
+        % Value changed function: MagnitudQpEditField
+        function MagnitudQpEditFieldValueChanged(app, event)
+            init(app)             
+        end
+
+        % Value changed function: NumPuntosEditField
+        function NumPuntosEditFieldValueChanged(app, event)
+            init(app)             
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Color = [0.9412 0.9412 0.9412];
+            app.UIFigure.Position = [100 100 932 568];
+            app.UIFigure.Name = 'MATLAB App';
+
+            % Create UIAxes
+            app.UIAxes = uiaxes(app.UIFigure);
+            title(app.UIAxes, 'Campo Eléctrico')
+            xlabel(app.UIAxes, 'X')
+            ylabel(app.UIAxes, 'Y')
+            zlabel(app.UIAxes, 'Z')
+            app.UIAxes.XLim = [-5 5];
+            app.UIAxes.YLim = [-5 5];
+            app.UIAxes.Position = [189 112 554 393];
+
+            % Create simularButton
+            app.simularButton = uibutton(app.UIFigure, 'push');
+            app.simularButton.ButtonPushedFcn = createCallbackFcn(app, @simularButtonPushed, true);
+            app.simularButton.Position = [393 30 145 31];
+            app.simularButton.Text = 'SIMULAR';
+
+            % Create MagnituddecargasLabel_4
+            app.MagnituddecargasLabel_4 = uilabel(app.UIFigure);
+            app.MagnituddecargasLabel_4.Position = [24 112 76 30];
+            app.MagnituddecargasLabel_4.Text = {'Magnitud'; 'de cargas (+)'};
+
+            % Create MagnitudQpEditField
+            app.MagnitudQpEditField = uieditfield(app.UIFigure, 'numeric');
+            app.MagnitudQpEditField.ValueChangedFcn = createCallbackFcn(app, @MagnitudQpEditFieldValueChanged, true);
+            app.MagnitudQpEditField.HorizontalAlignment = 'center';
+            app.MagnitudQpEditField.Position = [115 120 53 22];
+            app.MagnitudQpEditField.Value = 2;
+
+            % Create MagnituddecargasLabel_3
+            app.MagnituddecargasLabel_3 = uilabel(app.UIFigure);
+            app.MagnituddecargasLabel_3.Position = [26 51 73 30];
+            app.MagnituddecargasLabel_3.Text = {'Magnitud '; 'de cargas (-)'};
+
+            % Create MagnitudQnEditField
+            app.MagnitudQnEditField = uieditfield(app.UIFigure, 'numeric');
+            app.MagnitudQnEditField.ValueChangedFcn = createCallbackFcn(app, @MagnitudQnEditFieldValueChanged, true);
+            app.MagnitudQnEditField.HorizontalAlignment = 'center';
+            app.MagnitudQnEditField.Position = [114 59 55 22];
+            app.MagnitudQnEditField.Value = 2;
+
+            % Create LongdelineaSliderLabel
+            app.LongdelineaSliderLabel = uilabel(app.UIFigure);
+            app.LongdelineaSliderLabel.HorizontalAlignment = 'center';
+            app.LongdelineaSliderLabel.VerticalAlignment = 'top';
+            app.LongdelineaSliderLabel.Position = [52 412 48 30];
+            app.LongdelineaSliderLabel.Text = {'Long de'; 'linea'};
+
+            % Create LongQpSlider
+            app.LongQpSlider = uislider(app.UIFigure);
+            app.LongQpSlider.Limits = [0 10];
+            app.LongQpSlider.Orientation = 'vertical';
+            app.LongQpSlider.ValueChangedFcn = createCallbackFcn(app, @LongQpSliderValueChanged, true);
+            app.LongQpSlider.Step = 1;
+            app.LongQpSlider.Position = [64 224 3 170];
+            app.LongQpSlider.Value = 4;
+
+            % Create CantcargasLabel
+            app.CantcargasLabel = uilabel(app.UIFigure);
+            app.CantcargasLabel.HorizontalAlignment = 'center';
+            app.CantcargasLabel.VerticalAlignment = 'top';
+            app.CantcargasLabel.Position = [117 412 63 30];
+            app.CantcargasLabel.Text = {'Cant'; ' cargas (+)'};
+
+            % Create CantQpSlider
+            app.CantQpSlider = uislider(app.UIFigure);
+            app.CantQpSlider.Limits = [2 50];
+            app.CantQpSlider.Orientation = 'vertical';
+            app.CantQpSlider.ValueChangedFcn = createCallbackFcn(app, @CantQpSliderValueChanged, true);
+            app.CantQpSlider.Step = 1;
+            app.CantQpSlider.Position = [143 224 3 170];
+            app.CantQpSlider.Value = 20;
+
+            % Create CantcargasLabel_2
+            app.CantcargasLabel_2 = uilabel(app.UIFigure);
+            app.CantcargasLabel_2.HorizontalAlignment = 'center';
+            app.CantcargasLabel_2.VerticalAlignment = 'top';
+            app.CantcargasLabel_2.Position = [765 412 60 30];
+            app.CantcargasLabel_2.Text = {'Cant'; ' cargas (-)'};
+
+            % Create CantQnSlider
+            app.CantQnSlider = uislider(app.UIFigure);
+            app.CantQnSlider.Limits = [2 50];
+            app.CantQnSlider.Orientation = 'vertical';
+            app.CantQnSlider.ValueChangedFcn = createCallbackFcn(app, @CantQnSliderValueChanged, true);
+            app.CantQnSlider.Step = 1;
+            app.CantQnSlider.Position = [789 224 3 170];
+            app.CantQnSlider.Value = 20;
+
+            % Create LongdelineaSlider_2Label
+            app.LongdelineaSlider_2Label = uilabel(app.UIFigure);
+            app.LongdelineaSlider_2Label.HorizontalAlignment = 'center';
+            app.LongdelineaSlider_2Label.VerticalAlignment = 'top';
+            app.LongdelineaSlider_2Label.Position = [852 412 48 30];
+            app.LongdelineaSlider_2Label.Text = {'Long de'; 'linea'};
+
+            % Create LongQnSlider
+            app.LongQnSlider = uislider(app.UIFigure);
+            app.LongQnSlider.Limits = [0 10];
+            app.LongQnSlider.Orientation = 'vertical';
+            app.LongQnSlider.ValueChangedFcn = createCallbackFcn(app, @LongQnSliderValueChanged, true);
+            app.LongQnSlider.Step = 1;
+            app.LongQnSlider.Position = [864 224 3 170];
+            app.LongQnSlider.Value = 4;
+
+            % Create xEditFieldLabel
+            app.xEditFieldLabel = uilabel(app.UIFigure);
+            app.xEditFieldLabel.HorizontalAlignment = 'right';
+            app.xEditFieldLabel.Position = [681 15 25 22];
+            app.xEditFieldLabel.Text = 'x:';
+
+            % Create xEditField
+            app.xEditField = uieditfield(app.UIFigure, 'text');
+            app.xEditField.Position = [721 15 71 22];
+
+            % Create NumdepuntosLabel
+            app.NumdepuntosLabel = uilabel(app.UIFigure);
+            app.NumdepuntosLabel.HorizontalAlignment = 'right';
+            app.NumdepuntosLabel.Position = [759 69 90 22];
+            app.NumdepuntosLabel.Text = 'Num de puntos:';
+
+            % Create NumPuntosEditField
+            app.NumPuntosEditField = uieditfield(app.UIFigure, 'numeric');
+            app.NumPuntosEditField.ValueChangedFcn = createCallbackFcn(app, @NumPuntosEditFieldValueChanged, true);
+            app.NumPuntosEditField.Position = [864 69 28 22];
+            app.NumPuntosEditField.Value = 50;
+
+            % Create DistanciaSliderLabel
+            app.DistanciaSliderLabel = uilabel(app.UIFigure);
+            app.DistanciaSliderLabel.HorizontalAlignment = 'right';
+            app.DistanciaSliderLabel.Position = [187 92 54 22];
+            app.DistanciaSliderLabel.Text = 'Distancia';
+
+            % Create DistanciaSlider
+            app.DistanciaSlider = uislider(app.UIFigure);
+            app.DistanciaSlider.Limits = [0 10];
+            app.DistanciaSlider.ValueChangedFcn = createCallbackFcn(app, @DistanciaSliderValueChanged, true);
+            app.DistanciaSlider.Position = [263 101 486 3];
+            app.DistanciaSlider.Value = 2;
+
+            % Create yEditFieldLabel
+            app.yEditFieldLabel = uilabel(app.UIFigure);
+            app.yEditFieldLabel.HorizontalAlignment = 'right';
+            app.yEditFieldLabel.Position = [798 15 25 22];
+            app.yEditFieldLabel.Text = 'y:';
+
+            % Create yEditField
+            app.yEditField = uieditfield(app.UIFigure, 'text');
+            app.yEditField.Position = [838 15 71 22];
+
+            % Create MagnituddelcampoenLabel
+            app.MagnituddelcampoenLabel = uilabel(app.UIFigure);
+            app.MagnituddelcampoenLabel.Position = [744 39 133 22];
+            app.MagnituddelcampoenLabel.Text = 'Magnitud del campo en:';
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = otrabes
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
